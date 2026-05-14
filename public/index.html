@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BioCarbon Tracker — AI-Powered Biochar Carbon Sequestration</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-icon">🌱</span>
+        <h1>BioCarbon Tracker</h1>
+        <p>AI-Powered Biochar Carbon Sequestration</p>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="showTab('login')">Sign In</button>
+        <button class="tab-btn" onclick="showTab('register')">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" required placeholder="you@example.com" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" required placeholder="••••••••" />
+        </div>
+        <div id="login-error" class="error-msg hidden"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="reg-name" required placeholder="Jane Smith" />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="reg-email" required placeholder="you@example.com" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="reg-password" required placeholder="Min 8 characters" />
+        </div>
+        <div class="form-group">
+          <label>Organization (optional)</label>
+          <input type="text" id="reg-org" placeholder="Farm / Research Institute" />
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="reg-role">
+            <option value="farmer">Farmer</option>
+            <option value="researcher">Researcher</option>
+          </select>
+        </div>
+        <div id="register-error" class="error-msg hidden"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="register-btn">Create Account</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app" class="hidden">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="sidebar-logo">
+        <span>🌱</span>
+        <span>BioCarbon</span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#" class="nav-link active" data-page="dashboard" onclick="navigate('dashboard')">📊 Dashboard</a></li>
+        <li><a href="#" class="nav-link" data-page="fields" onclick="navigate('fields')">🌾 Fields</a></li>
+        <li><a href="#" class="nav-link" data-page="applications" onclick="navigate('applications')">🪣 Applications</a></li>
+        <li><a href="#" class="nav-link" data-page="soil-samples" onclick="navigate('soil-samples')">🧪 Soil Samples</a></li>
+        <li><a href="#" class="nav-link" data-page="carbon-reports" onclick="navigate('carbon-reports')">📋 Carbon Reports</a></li>
+        <li><a href="#" class="nav-link" data-page="ai-analysis" onclick="navigate('ai-analysis')">🤖 AI Analysis</a></li>
+        <li><a href="#" class="nav-link" data-page="calculator" onclick="navigate('calculator')">🧮 Calculator</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <span id="user-name-display"></span>
+        <button class="btn btn-sm btn-ghost" onclick="logout()">Sign Out</button>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <!-- Toast -->
+      <div id="toast" class="toast hidden"></div>
+
+      <!-- Dashboard Page -->
+      <div id="page-dashboard" class="page active">
+        <div class="page-header">
+          <h2>Dashboard</h2>
+          <button class="btn btn-primary" onclick="loadDashboard()">Refresh</button>
+        </div>
+        <div id="dashboard-content">
+          <div class="loading-spinner">Loading dashboard...</div>
+        </div>
+      </div>
+
+      <!-- Fields Page -->
+      <div id="page-fields" class="page hidden">
+        <div class="page-header">
+          <h2>Farm Fields</h2>
+          <button class="btn btn-primary" onclick="showFieldModal()">+ Add Field</button>
+        </div>
+        <div id="fields-content">
+          <div class="loading-spinner">Loading fields...</div>
+        </div>
+        <div id="fields-pagination" class="pagination-bar"></div>
+      </div>
+
+      <!-- Applications Page -->
+      <div id="page-applications" class="page hidden">
+        <div class="page-header">
+          <h2>Biochar Applications</h2>
+          <button class="btn btn-primary" onclick="showApplicationModal()">+ Record Application</button>
+        </div>
+        <div id="applications-content">
+          <div class="loading-spinner">Loading applications...</div>
+        </div>
+        <div id="applications-pagination" class="pagination-bar"></div>
+      </div>
+
+      <!-- Soil Samples Page -->
+      <div id="page-soil-samples" class="page hidden">
+        <div class="page-header">
+          <h2>Soil Samples</h2>
+          <button class="btn btn-primary" onclick="showSoilSampleModal()">+ Add Sample</button>
+        </div>
+        <div id="soil-samples-content">
+          <div class="loading-spinner">Loading soil samples...</div>
+        </div>
+        <div id="soil-samples-pagination" class="pagination-bar"></div>
+      </div>
+
+      <!-- Carbon Reports Page -->
+      <div id="page-carbon-reports" class="page hidden">
+        <div class="page-header">
+          <h2>Carbon Reports</h2>
+          <button class="btn btn-primary" onclick="showCarbonReportModal()">+ Generate Report</button>
+        </div>
+        <div id="carbon-reports-content">
+          <div class="loading-spinner">Loading reports...</div>
+        </div>
+        <div id="carbon-reports-pagination" class="pagination-bar"></div>
+      </div>
+
+      <!-- AI Analysis Page -->
+      <div id="page-ai-analysis" class="page hidden">
+        <div class="page-header">
+          <h2>AI Analysis</h2>
+          <span class="badge badge-ai">claude-3-5-sonnet</span>
+        </div>
+        <div class="ai-tools-grid">
+          <div class="ai-tool-card">
+            <div class="ai-tool-icon">🌍</div>
+            <h3>Carbon Sequestration Analysis</h3>
+            <p>Full AI analysis of carbon sequestration potential, permanence, and credit eligibility for a field.</p>
+            <div class="form-group">
+              <label>Select Field</label>
+              <select id="ai-seq-field" class="ai-field-select"></select>
+            </div>
+            <button class="btn btn-primary" onclick="runSequestrationAnalysis()">Run Analysis</button>
+          </div>
+          <div class="ai-tool-card">
+            <div class="ai-tool-icon">🧬</div>
+            <h3>Soil Health Analysis</h3>
+            <p>Deep analysis of soil health metrics, trends, and improvement recommendations.</p>
+            <div class="form-group">
+              <label>Select Field</label>
+              <select id="ai-soil-field" class="ai-field-select"></select>
+            </div>
+            <button class="btn btn-primary" onclick="runSoilHealthAnalysis()">Analyze Soil</button>
+          </div>
+          <div class="ai-tool-card">
+            <div class="ai-tool-icon">💡</div>
+            <h3>Biochar Recommendations</h3>
+            <p>Get AI-powered recommendations for biochar type, quantity, and application strategy.</p>
+            <div class="form-group">
+              <label>Select Field</label>
+              <select id="ai-rec-field" class="ai-field-select"></select>
+            </div>
+            <button class="btn btn-primary" onclick="runRecommendations()">Get Recommendations</button>
+          </div>
+          <div class="ai-tool-card">
+            <div class="ai-tool-icon">✅</div>
+            <h3>Carbon Market Validation</h3>
+            <p>Validate a carbon report against Verra VCS, Puro.earth, and Gold Standard requirements.</p>
+            <div class="form-group">
+              <label>Select Report</label>
+              <select id="ai-report-select" class="ai-field-select"></select>
+            </div>
+            <button class="btn btn-primary" onclick="runReportValidation()">Validate Report</button>
+          </div>
+          <div class="ai-tool-card ai-tool-card-wide">
+            <div class="ai-tool-icon">📈</div>
+            <h3>Portfolio Analysis</h3>
+            <p>Analyze your complete field portfolio for sequestration performance, risks, and optimization opportunities.</p>
+            <button class="btn btn-primary" onclick="runPortfolioAnalysis()">Analyze Portfolio</button>
+          </div>
+        </div>
+        <div id="ai-result-container" class="hidden">
+          <div class="ai-result-header">
+            <h3>AI Analysis Result</h3>
+            <div class="ai-result-meta" id="ai-result-meta"></div>
+          </div>
+          <div id="ai-result-content"></div>
+        </div>
+        <div class="section-header"><h3>Analysis History</h3></div>
+        <div id="ai-history-content"><div class="loading-spinner">Loading history...</div></div>
+        <div id="ai-history-pagination" class="pagination-bar"></div>
+      </div>
+
+      <!-- Carbon Calculator Page -->
+      <div id="page-calculator" class="page hidden">
+        <div class="page-header">
+          <h2>Carbon Credit Calculator</h2>
+        </div>
+        <div class="calculator-layout">
+          <div class="calculator-inputs card">
+            <h3>Inputs</h3>
+            <div class="form-group">
+              <label>Biochar Applied (kg)</label>
+              <input type="number" id="calc-kg" value="1000" min="0" step="100" oninput="calculateCredits()" />
+            </div>
+            <div class="form-group">
+              <label>Carbon Content (%)</label>
+              <input type="number" id="calc-carbon" value="70" min="0" max="100" step="1" oninput="calculateCredits()" />
+              <small>Typical range: 60-90% for quality biochar</small>
+            </div>
+            <div class="form-group">
+              <label>Permanence Factor (%)</label>
+              <input type="number" id="calc-permanence" value="90" min="0" max="100" step="1" oninput="calculateCredits()" />
+              <small>IBI standard: 80-95% over 100 years</small>
+            </div>
+            <div class="form-group">
+              <label>Market Price (USD/tCO2e)</label>
+              <input type="number" id="calc-price" value="35" min="0" step="5" oninput="calculateCredits()" />
+              <small>Voluntary market: $20-$150/tCO2e</small>
+            </div>
+          </div>
+          <div class="calculator-results card" id="calc-results">
+            <h3>Results</h3>
+            <div class="calc-result-grid">
+              <div class="calc-result-item">
+                <div class="calc-label">Biochar Tonnes</div>
+                <div class="calc-value" id="r-tonnes">1.00</div>
+              </div>
+              <div class="calc-result-item">
+                <div class="calc-label">Gross Sequestration</div>
+                <div class="calc-value" id="r-gross">2.57 tCO2e</div>
+              </div>
+              <div class="calc-result-item highlight">
+                <div class="calc-label">Net Carbon Credits</div>
+                <div class="calc-value large" id="r-net">2.31 tCO2e</div>
+              </div>
+              <div class="calc-result-item highlight-green">
+                <div class="calc-label">Estimated Value</div>
+                <div class="calc-value large" id="r-value">$80.85</div>
+              </div>
+            </div>
+            <p class="calc-methodology">Methodology: IBI Biochar Carbon Removal Standard</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODALS -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="modal-title">Modal</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
