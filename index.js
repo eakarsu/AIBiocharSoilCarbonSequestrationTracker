@@ -62,6 +62,7 @@ app.use('/api/carbon-reports', generalLimiter, require('./src/routes/carbonRepor
 app.use('/api/ai', require('./src/routes/ai'));
 app.use('/api/dashboard', generalLimiter, require('./src/routes/dashboard'));
 app.use('/api/users', generalLimiter, require('./src/routes/users'));
+app.use('/api/feedstock-eligibility', generalLimiter, require('./src/routes/feedstockEligibility'));
 // Apply pass 5 — backlog extensions (RAG / agentic / anomaly / tenancy)
 app.use('/api/ext', generalLimiter, require('./src/routes/extensions'));
 
@@ -86,13 +87,13 @@ app.use((err, _req, res, _next) => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;
 
-app.use('/api/mrv-workflow', require('./routes/agenticMrvWorkflow')); // apply pass 6 — audit custom suggestion
+app.use('/api/mrv-workflow', require('./src/routes/agenticMrvWorkflow')); // apply pass 6 — audit custom suggestion
 
-app.use('/api/protocol-rag', require('./routes/biocharProtocolRag')); // apply pass 6 — audit custom suggestion
+app.use('/api/protocol-rag', require('./src/routes/biocharProtocolRag')); // apply pass 6 — audit custom suggestion
 
-app.use('/api/satellite-imagery', require('./routes/satelliteImageryPipeline')); // apply pass 6 — audit custom suggestion
+app.use('/api/satellite-imagery', require('./src/routes/satelliteImageryPipeline')); // apply pass 6 — audit custom suggestion
 
-app.use('/api/credit-marketplace', require('./routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
+app.use('/api/credit-marketplace', require('./src/routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
 app.listen(PORT, () => {
   console.log(`[Biochar Tracker] Server running on http://localhost:${PORT}`);
   console.log(`[Biochar Tracker] Environment: ${process.env.NODE_ENV || 'development'}`);

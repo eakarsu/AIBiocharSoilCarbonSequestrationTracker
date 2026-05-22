@@ -4,8 +4,52 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/schema');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = 'claude-3-5-sonnet-20241022';
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-haiku-4.5';
+const USE_OPENROUTER = !!process.env.OPENROUTER_API_KEY || (process.env.ANTHROPIC_API_KEY || '').startsWith('sk-or-');
+
+const client = USE_OPENROUTER ? null : new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const MODEL = USE_OPENROUTER ? OPENROUTER_MODEL : 'claude-3-5-sonnet-20241022';
+
+async function callLLM({ systemPrompt, userPrompt, maxTokens }) {
+  if (USE_OPENROUTER) {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      const err = new Error(`OpenRouter ${resp.status}: ${errText.slice(0, 200)}`);
+      err.status = resp.status === 401 || resp.status === 403 ? 503 : resp.status;
+      throw err;
+    }
+    const data = await resp.json();
+    const text = data.choices?.[0]?.message?.content || '{}';
+    const tokensUsed = (data.usage?.prompt_tokens || 0) + (data.usage?.completion_tokens || 0);
+    return { text, tokensUsed };
+  }
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: userPrompt }],
+    system: systemPrompt,
+  });
+  return {
+    text: response.content[0]?.text || '{}',
+    tokensUsed: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+  };
+}
 
 /**
  * Robustly parse JSON from an AI text response.
@@ -125,16 +169,8 @@ Provide a comprehensive JSON analysis with this exact structure:
   "summary": "<2-3 sentence plain English summary>"
 }`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2000,
-    messages: [{ role: 'user', content: userPrompt }],
-    system: systemPrompt,
-  });
-
-  const rawText = response.content[0]?.text || '{}';
+  const { text: rawText, tokensUsed } = await callLLM({ systemPrompt, userPrompt, maxTokens: 2000 });
   const result = parseAIJson(rawText) || { error: 'Failed to parse AI response', raw: rawText };
-  const tokensUsed = response.usage?.input_tokens + response.usage?.output_tokens || 0;
 
   const resultId = persistAIResult({
     userId,
@@ -220,16 +256,8 @@ Provide comprehensive soil health analysis as JSON:
   "summary": "<2-3 sentence assessment>"
 }`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1800,
-    messages: [{ role: 'user', content: userPrompt }],
-    system: systemPrompt,
-  });
-
-  const rawText = response.content[0]?.text || '{}';
+  const { text: rawText, tokensUsed } = await callLLM({ systemPrompt, userPrompt, maxTokens: 1800 });
   const result = parseAIJson(rawText) || { error: 'Failed to parse AI response', raw: rawText };
-  const tokensUsed = response.usage?.input_tokens + response.usage?.output_tokens || 0;
 
   const resultId = persistAIResult({
     userId,
@@ -312,16 +340,8 @@ Provide recommendations as JSON:
   "summary": "<2-3 sentence practical summary>"
 }`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2000,
-    messages: [{ role: 'user', content: userPrompt }],
-    system: systemPrompt,
-  });
-
-  const rawText = response.content[0]?.text || '{}';
+  const { text: rawText, tokensUsed } = await callLLM({ systemPrompt, userPrompt, maxTokens: 2000 });
   const result = parseAIJson(rawText) || { error: 'Failed to parse AI response', raw: rawText };
-  const tokensUsed = response.usage?.input_tokens + response.usage?.output_tokens || 0;
 
   const resultId = persistAIResult({
     userId,
@@ -404,16 +424,8 @@ Validate against carbon market standards and respond as JSON:
   "summary": "<2-3 sentence compliance summary>"
 }`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1800,
-    messages: [{ role: 'user', content: userPrompt }],
-    system: systemPrompt,
-  });
-
-  const rawText = response.content[0]?.text || '{}';
+  const { text: rawText, tokensUsed } = await callLLM({ systemPrompt, userPrompt, maxTokens: 1800 });
   const result = parseAIJson(rawText) || { error: 'Failed to parse AI response', raw: rawText };
-  const tokensUsed = response.usage?.input_tokens + response.usage?.output_tokens || 0;
 
   const resultId = persistAIResult({
     userId,
@@ -484,16 +496,8 @@ Provide portfolio analysis as JSON:
   "summary": "<2-3 sentence portfolio summary>"
 }`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2000,
-    messages: [{ role: 'user', content: userPrompt }],
-    system: systemPrompt,
-  });
-
-  const rawText = response.content[0]?.text || '{}';
+  const { text: rawText, tokensUsed } = await callLLM({ systemPrompt, userPrompt, maxTokens: 2000 });
   const result = parseAIJson(rawText) || { error: 'Failed to parse AI response', raw: rawText };
-  const tokensUsed = response.usage?.input_tokens + response.usage?.output_tokens || 0;
 
   const resultId = persistAIResult({
     userId,

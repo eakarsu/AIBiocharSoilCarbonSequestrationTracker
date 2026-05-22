@@ -407,6 +407,18 @@ async function runPortfolioAnalysis() {
 }
 window.runPortfolioAnalysis = runPortfolioAnalysis;
 
+async function runFeedstockEligibility() {
+  const el = document.getElementById('feedstock-eligibility-result');
+  try {
+    const input = JSON.parse(document.getElementById('feedstock-eligibility-input').value || '{}');
+    const r = await api('/feedstock-eligibility/score', { method: 'POST', body: JSON.stringify(input) });
+    el.innerHTML = '<pre class="card">' + escapeHtml(JSON.stringify(r, null, 2)) + '</pre>';
+  } catch (e) {
+    el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
+  }
+}
+window.runFeedstockEligibility = runFeedstockEligibility;
+
 async function loadAIHistory() {
   const el = document.getElementById('ai-history-content');
   if (!el) return;

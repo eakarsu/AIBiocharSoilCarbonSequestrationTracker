@@ -82,6 +82,7 @@
         <li><a href="#" class="nav-link" data-page="carbon-reports" onclick="navigate('carbon-reports')">📋 Carbon Reports</a></li>
         <li><a href="#" class="nav-link" data-page="ai-analysis" onclick="navigate('ai-analysis')">🤖 AI Analysis</a></li>
         <li><a href="#" class="nav-link" data-page="calculator" onclick="navigate('calculator')">🧮 Calculator</a></li>
+        <li><a href="#" class="nav-link" data-page="feedstock-eligibility" onclick="navigate('feedstock-eligibility')">🌿 Feedstock Eligibility</a></li>
       </ul>
       <div class="sidebar-footer">
         <span id="user-name-display"></span>
@@ -270,6 +271,17 @@
             <p class="calc-methodology">Methodology: IBI Biochar Carbon Removal Standard</p>
           </div>
         </div>
+      </div>
+
+      <div id="page-feedstock-eligibility" class="page hidden">
+        <div class="page-header">
+          <h2>Feedstock Eligibility</h2>
+          <button class="btn btn-primary" onclick="runFeedstockEligibility()">Score Feedstock</button>
+        </div>
+        <div class="card">
+          <textarea id="feedstock-eligibility-input" rows="8">{"feedstock":"orchard prunings","moisture_pct":19,"ash_pct":11,"pyrolysis_temp_c":540,"contamination_risk":0}</textarea>
+        </div>
+        <div id="feedstock-eligibility-result"></div>
       </div>
     </main>
   </div>
