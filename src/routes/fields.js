@@ -139,14 +139,13 @@ router.get('/:id/summary', (req, res, next) => {
     const reports = db.prepare('SELECT * FROM carbon_reports WHERE field_id = ? ORDER BY created_at DESC').all(req.params.id);
 
     const totalBiocharKg = applications.reduce((s, a) => s + a.quantity_kg, 0);
-    // Estimate: 1 tonne biochar with 80% C content ≈ 2.5 tCO2e sequestered (IBI standard)
+    // Illustrative, unverified estimate only; governed MRV requires measured evidence.
     const estimatedTco2e = applications.reduce((s, a) => {
       const cPct = a.carbon_content_percent || 70;
       return s + (a.quantity_kg / 1000) * (cPct / 100) * 3.67 * 0.9; // 90% permanence
     }, 0);
 
     const latestSoc = samples.length > 0 ? samples[0].organic_carbon_percent : null;
-    const totalCreditValue = estimatedTco2e * 35; // ~$35/tCO2e voluntary market
 
     res.json({
       data: {
@@ -154,7 +153,7 @@ router.get('/:id/summary', (req, res, next) => {
         totals: {
           total_biochar_kg: Math.round(totalBiocharKg * 100) / 100,
           estimated_sequestered_tco2e: Math.round(estimatedTco2e * 100) / 100,
-          estimated_credit_value_usd: Math.round(totalCreditValue * 100) / 100,
+          estimate_status: 'unverified_not_for_issuance',
           application_count: applications.length,
           sample_count: samples.length,
           report_count: reports.length,

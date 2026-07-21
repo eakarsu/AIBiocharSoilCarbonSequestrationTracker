@@ -65,7 +65,7 @@ router.get('/:id', (req, res, next) => {
   }
 });
 
-// POST /api/carbon-reports — auto-calculate from applications if not provided
+// POST /api/carbon-reports — creates an explicitly unverified estimate.
 router.post('/', validate(schemas.carbonReport), (req, res, next) => {
   try {
     const db = getDb();
@@ -99,7 +99,7 @@ router.post('/', validate(schemas.carbonReport), (req, res, next) => {
     `).run(id, field_id, req.user.id, report_period_start, report_period_end, total_biochar_applied_kg, estimated_carbon_sequestered_tco2e, baseline_carbon_tco2e, net_carbon_credits, methodology || 'Biochar Carbon Removal', notes ?? null);
 
     const row = db.prepare('SELECT * FROM carbon_reports WHERE id = ?').get(id);
-    res.status(201).json({ data: row, message: 'Carbon report created' });
+    res.status(201).json({ data: row, message: 'Unverified estimate created; use the governed MRV workflow for evidence and independent verification', issuance_status: 'not_issued' });
   } catch (err) {
     next(err);
   }
