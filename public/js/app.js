@@ -102,6 +102,20 @@ async function handleLogin(ev) {
 }
 window.handleLogin = handleLogin;
 
+const demoCredentialsButton = document.createElement('button');
+demoCredentialsButton.type = 'button';
+demoCredentialsButton.className = 'btn-primary';
+demoCredentialsButton.textContent = 'Auto Fill Demo Credentials';
+demoCredentialsButton.setAttribute('aria-label', 'Auto Fill Demo Credentials');
+demoCredentialsButton.addEventListener('click', async () => {
+  try {
+    const credentials = await api('/auth/demo-credentials');
+    document.getElementById('login-email').value = credentials.email;
+    document.getElementById('login-password').value = credentials.password;
+  } catch (error) { toast(error.message, 'error'); }
+});
+document.getElementById('login-form').appendChild(demoCredentialsButton);
+
 async function handleRegister(ev) {
   ev.preventDefault();
   const errEl = document.getElementById('register-error');

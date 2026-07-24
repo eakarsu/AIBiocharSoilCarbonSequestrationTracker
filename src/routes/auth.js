@@ -15,6 +15,19 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
+router.get('/demo-credentials', (_req, res) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DEMO_CREDENTIAL_AUTOFILL === 'false') return res.sendStatus(404);
+  const pairs = [
+    [process.env.PROVISION_ADMIN_EMAIL, process.env.PROVISION_ADMIN_PASSWORD],
+    [process.env.SEED_ADMIN_EMAIL, process.env.SEED_ADMIN_PASSWORD],
+    [process.env.DEMO_EMAIL, process.env.DEMO_PASSWORD],
+    [process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD],
+  ];
+  const credentials = pairs.find(([email, password]) => email && password);
+  if (!credentials) return res.sendStatus(404);
+  res.set('Cache-Control', 'no-store').json({ email: credentials[0], password: credentials[1] });
+});
+
 if (!JWT_SECRET || JWT_SECRET === 'dev-secret' || JWT_SECRET === 'your-super-secret-jwt-key-change-in-production') {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('JWT_SECRET must be set to a strong secret in production');
