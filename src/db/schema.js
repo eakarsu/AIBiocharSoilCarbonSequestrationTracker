@@ -179,6 +179,18 @@ function initializeSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS runtime_ai_provider_receipts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_request_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS mrv_workflows (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -220,6 +232,7 @@ function initializeSchema() {
     CREATE INDEX IF NOT EXISTS idx_reports_user ON carbon_reports(user_id);
     CREATE INDEX IF NOT EXISTS idx_ai_results_entity ON ai_results(entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS idx_ai_results_user ON ai_results(user_id);
+    CREATE INDEX IF NOT EXISTS idx_runtime_ai_receipts_user_created ON runtime_ai_provider_receipts(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_mrv_workflows_tenant_status ON mrv_workflows(tenant_id, status);
     CREATE INDEX IF NOT EXISTS idx_mrv_events_workflow ON mrv_workflow_events(workflow_id, created_at);

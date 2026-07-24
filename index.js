@@ -5,7 +5,6 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
-const { provisionAdmin } = require('./scripts/create-admin');
 
 const { generalLimiter, authLimiter } = require('./src/middleware/rateLimiter');
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || !process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET.length < 32) {
@@ -55,6 +54,7 @@ app.get('/health', (_req, res) => {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth', authLimiter, require('./src/routes/auth'));
+app.use('/api/runtime-ai', require('./src/routes/runtimeAi'));
 app.use('/api/fields', generalLimiter, require('./src/routes/fields'));
 app.use('/api/applications', generalLimiter, require('./src/routes/applications'));
 app.use('/api/soil-samples', generalLimiter, require('./src/routes/soilSamples'));
@@ -95,9 +95,6 @@ app.use('/api/satellite-imagery', require('./src/routes/satelliteImageryPipeline
 
 app.use('/api/credit-marketplace', require('./src/routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
 async function startServer() {
-  if (process.env.BOOTSTRAP_ACKNOWLEDGEMENT === 'create-initial-admin') {
-    await provisionAdmin();
-  }
   app.listen(PORT, () => {
     console.log(`[Biochar Tracker] Server running on http://localhost:${PORT}`);
     console.log(`[Biochar Tracker] Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -105,7 +102,7 @@ async function startServer() {
 }
 
 startServer().catch((error) => {
-  console.error('[startup] operator provisioning failed:', error.message);
+  console.error('[startup] server failed:', error.message);
   process.exitCode = 1;
 });
 
