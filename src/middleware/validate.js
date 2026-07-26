@@ -64,6 +64,9 @@ const carbonReportSchema = z.object({
   net_carbon_credits: z.number().optional().nullable(),
   methodology: z.string().max(200).optional().default('Biochar Carbon Removal'),
   notes: z.string().max(2000).optional().nullable(),
+}).refine((value) => value.report_period_start <= value.report_period_end, {
+  message: 'Report period end must not precede its start',
+  path: ['report_period_end'],
 });
 
 const verificationSchema = z.object({

@@ -12,8 +12,22 @@ const { validate, schemas } = require('../middleware/validate');
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+const validDuration = (value, fallback) => /^(?:\d+|\d+(?:ms|s|m|h|d|w|y))$/i.test(value || '') ? value : fallback;
+const JWT_EXPIRES_IN = validDuration(process.env.JWT_EXPIRES_IN, '15m');
+const JWT_REFRESH_EXPIRES_IN = validDuration(process.env.JWT_REFRESH_EXPIRES_IN, '7d');
+
+router.get('/demo-credentials', (_req, res) => {
+  if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DEMO_CREDENTIAL_AUTOFILL === 'false') return res.sendStatus(404);
+  const pairs = [
+    [process.env.PROVISION_ADMIN_EMAIL, process.env.PROVISION_ADMIN_PASSWORD],
+    [process.env.SEED_ADMIN_EMAIL, process.env.SEED_ADMIN_PASSWORD],
+    [process.env.DEMO_EMAIL, process.env.DEMO_PASSWORD],
+    [process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD],
+  ];
+  const credentials = pairs.find(([email, password]) => email && password);
+  if (!credentials) return res.sendStatus(404);
+  res.set('Cache-Control', 'no-store').json({ email: credentials[0], password: credentials[1] });
+});
 
 router.get('/demo-credentials', (_req, res) => {
   if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DEMO_CREDENTIAL_AUTOFILL === 'false') return res.sendStatus(404);
@@ -36,14 +50,15 @@ if (!JWT_SECRET || JWT_SECRET === 'dev-secret' || JWT_SECRET === 'your-super-sec
 }
 
 function signTokens(userId, role, email) {
+  if (!JWT_SECRET || !JWT_REFRESH_SECRET) throw new Error('JWT secrets are not configured');
   const accessToken = jwt.sign(
     { id: userId, role, email },
-    JWT_SECRET || 'dev-secret',
+    JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
   const refreshToken = jwt.sign(
     { id: userId, type: 'refresh' },
-    JWT_REFRESH_SECRET || 'dev-refresh-secret',
+    JWT_REFRESH_SECRET,
     { expiresIn: JWT_REFRESH_EXPIRES_IN }
   );
   return { accessToken, refreshToken };
@@ -53,7 +68,8 @@ function signTokens(userId, role, email) {
 router.post('/register', validate(schemas.register), async (req, res, next) => {
   try {
     const db = getDb();
-    const { email, password, name, organization, role } = req.body;
+    const { email, password, name, organization } = req.body;
+    const role = 'farmer';
 
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) {
@@ -66,9 +82,9 @@ router.post('/register', validate(schemas.register), async (req, res, next) => {
     db.prepare(`
       INSERT INTO users (id, email, password_hash, name, role, organization)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(userId, email.toLowerCase(), passwordHash, name, role || 'farmer', organization || null);
+    `).run(userId, email.toLowerCase(), passwordHash, name, role, organization || null);
 
-    const { accessToken, refreshToken } = signTokens(userId, role || 'farmer', email);
+    const { accessToken, refreshToken } = signTokens(userId, role, email);
 
     // Store refresh token hash
     const tokenHash = await bcrypt.hash(refreshToken, 8);
@@ -82,7 +98,7 @@ router.post('/register', validate(schemas.register), async (req, res, next) => {
       message: 'Account created successfully',
       accessToken,
       refreshToken,
-      user: { id: userId, email, name, role: role || 'farmer', organization },
+      user: { id: userId, email, name, role, organization },
     });
   } catch (err) {
     next(err);
@@ -135,7 +151,7 @@ router.post('/refresh', async (req, res, next) => {
 
     let payload;
     try {
-      payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET || 'dev-refresh-secret');
+      payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
     } catch {
       return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }

@@ -1,6 +1,57 @@
 'use strict';
 
-const Database = require('better-sqlite3');
+let NativeDatabase;
+let nativeLoadError;
+try {
+  NativeDatabase = require('better-sqlite3');
+} catch (error) {
+  nativeLoadError = error;
+}
+
+function openBuiltinDatabase(filename) {
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    class CompatibleDatabase extends DatabaseSync {
+      pragma(statement) {
+        return this.exec(`PRAGMA ${statement}`);
+      }
+
+      transaction(callback) {
+        return (...args) => {
+          this.exec('BEGIN IMMEDIATE');
+          try {
+            const result = callback(...args);
+            this.exec('COMMIT');
+            return result;
+          } catch (error) {
+            this.exec('ROLLBACK');
+            throw error;
+          }
+        };
+      }
+    }
+    return new CompatibleDatabase(filename);
+  } catch {
+    throw nativeLoadError;
+  }
+}
+
+class Database {
+  constructor(filename) {
+    // Requiring a native addon can succeed even when opening it later reveals
+    // a Node ABI mismatch, so guard construction as well as module loading.
+    if (NativeDatabase) {
+      try {
+        return new NativeDatabase(filename);
+      } catch (error) {
+        nativeLoadError = error;
+      }
+    }
+    // Node 22+ ships a synchronous SQLite API compatible with the operations
+    // used here. Older runtimes still receive the original native-addon error.
+    return openBuiltinDatabase(filename);
+  }
+}
 const path = require('path');
 require('dotenv').config();
 
@@ -13,7 +64,6 @@ function getDb() {
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
-    initializeSchema();
   }
   return db;
 }
@@ -129,6 +179,50 @@ function initializeSchema() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS runtime_ai_provider_receipts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_request_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS mrv_workflows (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('blocked', 'awaiting_independent_verification', 'verified_pending_registry')),
+      record_json TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      verified_by TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (tenant_id, idempotency_key),
+      FOREIGN KEY (created_by) REFERENCES users(id),
+      FOREIGN KEY (verified_by) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS mrv_workflow_events (
+      id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      evidence_hash TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workflow_id) REFERENCES mrv_workflows(id) ON DELETE CASCADE,
+      FOREIGN KEY (actor_id) REFERENCES users(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_fields_user ON fields(user_id);
     CREATE INDEX IF NOT EXISTS idx_applications_field ON biochar_applications(field_id);
     CREATE INDEX IF NOT EXISTS idx_applications_user ON biochar_applications(user_id);
@@ -138,8 +232,13 @@ function initializeSchema() {
     CREATE INDEX IF NOT EXISTS idx_reports_user ON carbon_reports(user_id);
     CREATE INDEX IF NOT EXISTS idx_ai_results_entity ON ai_results(entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS idx_ai_results_user ON ai_results(user_id);
+    CREATE INDEX IF NOT EXISTS idx_runtime_ai_receipts_user_created ON runtime_ai_provider_receipts(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_mrv_workflows_tenant_status ON mrv_workflows(tenant_id, status);
+    CREATE INDEX IF NOT EXISTS idx_mrv_events_workflow ON mrv_workflow_events(workflow_id, created_at);
   `);
 }
 
-module.exports = { getDb };
+function migrate() { getDb(); initializeSchema(); }
+
+module.exports = { getDb, migrate };

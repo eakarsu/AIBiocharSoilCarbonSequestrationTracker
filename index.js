@@ -7,10 +7,9 @@ const cors = require('cors');
 const path = require('path');
 
 const { generalLimiter, authLimiter } = require('./src/middleware/rateLimiter');
-const { getDb } = require('./src/db/schema');
-
-// Initialize DB on startup
-getDb();
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || !process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET.length < 32) {
+  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must each contain at least 32 characters');
+}
 
 const app = express();
 
@@ -55,6 +54,7 @@ app.get('/health', (_req, res) => {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth', authLimiter, require('./src/routes/auth'));
+app.use('/api/runtime-ai', require('./src/routes/runtimeAi'));
 app.use('/api/fields', generalLimiter, require('./src/routes/fields'));
 app.use('/api/applications', generalLimiter, require('./src/routes/applications'));
 app.use('/api/soil-samples', generalLimiter, require('./src/routes/soilSamples'));
@@ -63,8 +63,8 @@ app.use('/api/ai', require('./src/routes/ai'));
 app.use('/api/dashboard', generalLimiter, require('./src/routes/dashboard'));
 app.use('/api/users', generalLimiter, require('./src/routes/users'));
 app.use('/api/feedstock-eligibility', generalLimiter, require('./src/routes/feedstockEligibility'));
-// Apply pass 5 — backlog extensions (RAG / agentic / anomaly / tenancy)
-app.use('/api/ext', generalLimiter, require('./src/routes/extensions'));
+app.use('/api/mrv-workflows', generalLimiter, require('./src/routes/mrvWorkflows'));
+// Prototype extension routes remain quarantined until their tenancy and provider contracts are production-backed.
 
 // ─── SPA Fallback ────────────────────────────────────────────────────────────
 // Apply pass 5: '*' is invalid in Express 5 / path-to-regexp v8 — '/{*splat}' is the
@@ -94,23 +94,16 @@ app.use('/api/protocol-rag', require('./src/routes/biocharProtocolRag')); // app
 app.use('/api/satellite-imagery', require('./src/routes/satelliteImageryPipeline')); // apply pass 6 — audit custom suggestion
 
 app.use('/api/credit-marketplace', require('./src/routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
-app.listen(PORT, () => {
-  console.log(`[Biochar Tracker] Server running on http://localhost:${PORT}`);
-  console.log(`[Biochar Tracker] Environment: ${process.env.NODE_ENV || 'development'}`);
+async function startServer() {
+  app.listen(PORT, () => {
+    console.log(`[Biochar Tracker] Server running on http://localhost:${PORT}`);
+    console.log(`[Biochar Tracker] Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error('[startup] server failed:', error.message);
+  process.exitCode = 1;
 });
 
 module.exports = app;
-
-
-// === Batch 01 Gaps & Frontend Mounts ===
-app.use('/api/gap-no-ndvi-satellite-imagery-analysis-for-plot-verifi', require('./src/routes/gap_no_ndvi_satellite_imagery_analysis_for_plot_verifi'));
-app.use('/api/gap-no-ai-carbon-credit-document-drafting', require('./src/routes/gap_no_ai_carbon_credit_document_drafting'));
-app.use('/api/gap-no-predictive-durability-modeling-for-biochar-pers', require('./src/routes/gap_no_predictive_durability_modeling_for_biochar_pers'));
-app.use('/api/gap-no-ai-verra-gold-standard-protocol-q-a', require('./src/routes/gap_no_ai_verra_gold_standard_protocol_q_a'));
-app.use('/api/gap-no-spa-frontend-only-server-rendered-html-in-publi', require('./src/routes/gap_no_spa_frontend_only_server_rendered_html_in_publi'));
-app.use('/api/gap-no-geo-mapping-gis-layer', require('./src/routes/gap_no_geo_mapping_gis_layer'));
-app.use('/api/gap-no-carbon-credit-registry-integration-verra-puro-e', require('./src/routes/gap_no_carbon_credit_registry_integration_verra_puro_e'));
-app.use('/api/gap-no-farmer-landowner-onboarding-wizard', require('./src/routes/gap_no_farmer_landowner_onboarding_wizard'));
-app.use('/api/gap-no-payment-credit-issuance-ledger', require('./src/routes/gap_no_payment_credit_issuance_ledger'));
-app.use('/api/gap-no-notification-system', require('./src/routes/gap_no_notification_system'));
-app.use('/api/gap-no-webhook-outbound-api', require('./src/routes/gap_no_webhook_outbound_api'));

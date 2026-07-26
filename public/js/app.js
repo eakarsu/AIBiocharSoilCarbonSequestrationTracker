@@ -44,10 +44,7 @@ async function api(path, opts = {}) {
     if (res.status === 401) {
       logout();
     }
-    if (res.status === 503) {
-      const msg = (body && (body.error || body.message)) || 'Service unavailable';
-      throw new Error('AI service unavailable (503): ' + msg + ' — set ANTHROPIC_API_KEY in the server .env');
-    }
+    if (res.status === 503) throw new Error((body && (body.error || body.message)) || 'Service unavailable');
     const err = new Error((body && (body.error || body.message)) || ('HTTP ' + res.status));
     err.status = res.status;
     err.body = body;
@@ -125,7 +122,6 @@ async function handleRegister(ev) {
     email: document.getElementById('reg-email').value,
     password: document.getElementById('reg-password').value,
     organization: document.getElementById('reg-org').value || undefined,
-    role: document.getElementById('reg-role').value,
   };
   try {
     const r = await api('/auth/register', {
@@ -298,11 +294,69 @@ async function loadCarbonReports() {
 }
 window.loadCarbonReports = loadCarbonReports;
 
-// ─── Modal placeholders (safe no-ops) ───────────────────────────────────────
-function showFieldModal()        { toast('Add Field UI not implemented in this build.', 'info'); }
-function showApplicationModal()  { toast('Add Application UI not implemented in this build.', 'info'); }
-function showSoilSampleModal()   { toast('Add Soil Sample UI not implemented in this build.', 'info'); }
-function showCarbonReportModal() { toast('Generate Report UI not implemented in this build.', 'info'); }
+// ─── Durable create forms ───────────────────────────────────────────────────
+function openCreateModal(title, endpoint, fields, reload) {
+  const overlay = document.getElementById('modal-overlay');
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = `
+    <form id="create-record-form">
+      ${fields.map(field => {
+        const required = field.required ? 'required' : '';
+        if (field.type === 'select') return `<div class="form-group"><label>${escapeHtml(field.label)}</label><select name="${escapeAttr(field.name)}" ${required}>${field.options.map(option => `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`).join('')}</select></div>`;
+        return `<div class="form-group"><label>${escapeHtml(field.label)}</label><input name="${escapeAttr(field.name)}" type="${field.type || 'text'}" ${required} ${field.step ? `step="${field.step}"` : ''}></div>`;
+      }).join('')}
+      <div id="modal-error" class="error-msg hidden"></div>
+      <button class="btn btn-primary btn-full" type="submit">Save</button>
+    </form>`;
+  overlay.classList.remove('hidden');
+  document.getElementById('create-record-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const errorElement = document.getElementById('modal-error');
+    const form = new FormData(event.currentTarget);
+    const payload = {};
+    for (const field of fields) {
+      const value = form.get(field.name);
+      if (value === '') continue;
+      payload[field.name] = field.type === 'number' ? Number(value) : value;
+    }
+    try {
+      await api(endpoint, { method: 'POST', body: JSON.stringify(payload) });
+      closeModal(); await reload(); toast(`${title} saved`, 'success');
+    } catch (error) {
+      errorElement.textContent = error.body?.details?.map(item => `${item.field}: ${item.message}`).join('; ') || error.message;
+      errorElement.classList.remove('hidden');
+    }
+  });
+}
+
+const fieldOptions = () => state.fields.map(field => ({ value: field.id, label: field.name }));
+function showFieldModal() { openCreateModal('Add Field', '/fields', [
+  { name: 'name', label: 'Field name', required: true }, { name: 'area_hectares', label: 'Area (hectares)', type: 'number', step: '0.01', required: true },
+  { name: 'soil_type', label: 'Soil type' }, { name: 'climate_zone', label: 'Climate zone' },
+], loadFields); }
+function showApplicationModal() {
+  if (!state.fields.length) return toast('Add a field before recording an application.', 'info');
+  openCreateModal('Record Application', '/applications', [
+    { name: 'field_id', label: 'Field', type: 'select', options: fieldOptions(), required: true }, { name: 'application_date', label: 'Application date', type: 'date', required: true },
+    { name: 'biochar_type', label: 'Biochar type', required: true }, { name: 'quantity_kg', label: 'Quantity (kg)', type: 'number', step: '0.01', required: true },
+    { name: 'carbon_content_percent', label: 'Measured carbon content (%)', type: 'number', step: '0.01' },
+  ], loadApplications);
+}
+function showSoilSampleModal() {
+  if (!state.fields.length) return toast('Add a field before recording a soil sample.', 'info');
+  openCreateModal('Record Soil Sample', '/soil-samples', [
+    { name: 'field_id', label: 'Field', type: 'select', options: fieldOptions(), required: true }, { name: 'sample_date', label: 'Sample date', type: 'date', required: true },
+    { name: 'depth_cm', label: 'Depth (cm)', type: 'number', step: '0.01', required: true }, { name: 'organic_carbon_percent', label: 'Organic carbon (%)', type: 'number', step: '0.01' },
+    { name: 'bulk_density_g_cm3', label: 'Bulk density (g/cm³)', type: 'number', step: '0.001' }, { name: 'ph', label: 'pH', type: 'number', step: '0.01' },
+  ], loadSoilSamples);
+}
+function showCarbonReportModal() {
+  if (!state.fields.length) return toast('Add a field before creating an estimate.', 'info');
+  openCreateModal('Create Unverified Estimate', '/carbon-reports', [
+    { name: 'field_id', label: 'Field', type: 'select', options: fieldOptions(), required: true }, { name: 'report_period_start', label: 'Period start', type: 'date', required: true },
+    { name: 'report_period_end', label: 'Period end', type: 'date', required: true }, { name: 'methodology', label: 'Methodology and version', required: true },
+  ], loadCarbonReports);
+}
 function closeModal()            { document.getElementById('modal-overlay').classList.add('hidden'); }
 window.showFieldModal = showFieldModal;
 window.showApplicationModal = showApplicationModal;

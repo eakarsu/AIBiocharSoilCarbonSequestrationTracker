@@ -14,7 +14,8 @@ function authenticateToken(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    if (!process.env.JWT_SECRET) return res.status(500).json({ error: 'Authentication is not configured' });
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
     req.user = payload;
     next();
   } catch (err) {
