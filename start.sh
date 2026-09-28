@@ -12,6 +12,10 @@ set -a; source .env; set +a
 for runtime_port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
   if lsof -nP -iTCP:"$runtime_port" -sTCP:LISTEN >/dev/null 2>&1; then echo "Port $runtime_port is already in use; no process was changed." >&2; exit 1; fi
 done
+if [[ "${ALLOW_SCHEMA_MIGRATION:-false}" == "true" ]]; then
+  npm run db:migrate
+  BOOTSTRAP_ACKNOWLEDGEMENT=create-initial-admin npm run create-admin
+fi
 (PORT="$BACKEND_PORT" node index.js) & backend_pid=$!
 (node frontend-server.js) & frontend_pid=$!
 cleanup() { trap - INT TERM EXIT; kill "$backend_pid" "$frontend_pid" 2>/dev/null || true; wait "$backend_pid" "$frontend_pid" 2>/dev/null || true; }
