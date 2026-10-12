@@ -31,7 +31,7 @@ router.get('/', (req, res, next) => {
 
     const total = db.prepare(`SELECT COUNT(*) as count FROM carbon_reports r WHERE ${where}`).get(...params).count;
     const rows = db.prepare(`
-      SELECT r.*, f.name as field_name, f.area_hectares
+      SELECT r.*, f.name as field_name, f.area_hectares, (r.net_carbon_credits * 50) as estimated_value_usd
       FROM carbon_reports r
       JOIN fields f ON f.id = r.field_id
       WHERE ${where}
@@ -53,7 +53,7 @@ router.get('/:id', (req, res, next) => {
   try {
     const db = getDb();
     const row = db.prepare(`
-      SELECT r.*, f.name as field_name, f.area_hectares, f.soil_type, f.climate_zone
+      SELECT r.*, f.name as field_name, f.area_hectares, f.soil_type, f.climate_zone, (r.net_carbon_credits * 50) as estimated_value_usd
       FROM carbon_reports r
       JOIN fields f ON f.id = r.field_id
       WHERE r.id = ? AND r.user_id = ?

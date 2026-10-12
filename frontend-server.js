@@ -4,6 +4,8 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const frontendPort = Number(process.env.FRONTEND_PORT);
 const backendPort = Number(process.env.BACKEND_PORT);
 if (!Number.isInteger(frontendPort) || !Number.isInteger(backendPort)) throw new Error('BACKEND_PORT and FRONTEND_PORT are required');

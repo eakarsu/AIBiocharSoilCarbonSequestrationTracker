@@ -200,4 +200,13 @@ router.get('/history', (req, res, next) => {
   }
 });
 
+// Read a stored analysis belonging to the signed-in user.
+router.get('/history/:id', (req, res, next) => {
+  try {
+    const row = getDb().prepare('SELECT id, entity_type, entity_id, analysis_type, model, prompt_summary, result_json, tokens_used, created_at FROM ai_results WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!row) return res.status(404).json({ error: 'Analysis not found' });
+    res.json({ data: { ...row, result_json: JSON.parse(row.result_json) } });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

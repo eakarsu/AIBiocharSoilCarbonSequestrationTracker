@@ -7,6 +7,7 @@ const cors = require('cors');
 const path = require('path');
 
 const { generalLimiter, authLimiter } = require('./src/middleware/rateLimiter');
+const { migrate } = require('./src/db/schema');
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || !process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET.length < 32) {
   throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must each contain at least 32 characters');
 }
@@ -21,6 +22,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
     },
   },
@@ -66,6 +68,16 @@ app.use('/api/feedstock-eligibility', generalLimiter, require('./src/routes/feed
 app.use('/api/mrv-workflows', generalLimiter, require('./src/routes/mrvWorkflows'));
 // Prototype extension routes remain quarantined until their tenancy and provider contracts are production-backed.
 
+// ─── AI extension routes ─────────────────────────────────────────────────────
+// Registered before the SPA fallback so GET requests are not swallowed by it.
+app.use('/api/mrv-workflow', require('./src/routes/agenticMrvWorkflow')); // apply pass 6 — audit custom suggestion
+app.use('/api/protocol-rag', require('./src/routes/biocharProtocolRag')); // apply pass 6 — audit custom suggestion
+app.use('/api/satellite-imagery', require('./src/routes/satelliteImageryPipeline')); // apply pass 6 — audit custom suggestion
+app.use('/api/credit-marketplace', require('./src/routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
+
+// Unmatched /api routes must return a JSON 404 instead of the SPA shell.
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Route not found' }));
+
 // ─── SPA Fallback ────────────────────────────────────────────────────────────
 // Apply pass 5: '*' is invalid in Express 5 / path-to-regexp v8 — '/{*splat}' is the
 // equivalent. Pre-existing breakage; one-line fix to unblock startup so the new
@@ -87,14 +99,22 @@ app.use((err, _req, res, _next) => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;
 
-app.use('/api/mrv-workflow', require('./src/routes/agenticMrvWorkflow')); // apply pass 6 — audit custom suggestion
+// Honor the same opt-in bootstrap flags the start script uses so that
+// `npm start` initializes the schema and the initial operator before serving.
+async function ensureRuntimeSchema() {
+  if (process.env.ALLOW_SCHEMA_MIGRATION !== 'true') return;
+  try {
+    migrate();
+    if (process.env.BOOTSTRAP_ACKNOWLEDGEMENT === 'create-initial-admin') {
+      await require('./scripts/create-admin').provisionAdmin();
+    }
+  } catch (error) {
+    console.warn('[bootstrap] schema/operator initialization skipped:', error.message);
+  }
+}
 
-app.use('/api/protocol-rag', require('./src/routes/biocharProtocolRag')); // apply pass 6 — audit custom suggestion
-
-app.use('/api/satellite-imagery', require('./src/routes/satelliteImageryPipeline')); // apply pass 6 — audit custom suggestion
-
-app.use('/api/credit-marketplace', require('./src/routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
 async function startServer() {
+  await ensureRuntimeSchema();
   app.listen(PORT, () => {
     console.log(`[Biochar Tracker] Server running on http://localhost:${PORT}`);
     console.log(`[Biochar Tracker] Environment: ${process.env.NODE_ENV || 'development'}`);

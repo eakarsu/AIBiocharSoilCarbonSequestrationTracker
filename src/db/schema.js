@@ -99,6 +99,7 @@ function initializeSchema() {
       area_hectares REAL NOT NULL,
       soil_type TEXT,
       climate_zone TEXT,
+      crop_type TEXT,
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -237,6 +238,7 @@ function initializeSchema() {
     CREATE INDEX IF NOT EXISTS idx_mrv_workflows_tenant_status ON mrv_workflows(tenant_id, status);
     CREATE INDEX IF NOT EXISTS idx_mrv_events_workflow ON mrv_workflow_events(workflow_id, created_at);
   `);
+  try { db.exec('ALTER TABLE fields ADD COLUMN crop_type TEXT'); } catch (_) { /* column already exists */ }
 }
 
 function migrate() { getDb(); initializeSchema(); }

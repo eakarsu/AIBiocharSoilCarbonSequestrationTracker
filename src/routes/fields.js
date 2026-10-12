@@ -79,12 +79,12 @@ router.post('/', validate(schemas.field), (req, res, next) => {
   try {
     const db = getDb();
     const id = uuidv4();
-    const { name, location_lat, location_lng, area_hectares, soil_type, climate_zone, description } = req.body;
+    const { name, location_lat, location_lng, area_hectares, soil_type, climate_zone, crop_type, description } = req.body;
 
     db.prepare(`
-      INSERT INTO fields (id, user_id, name, location_lat, location_lng, area_hectares, soil_type, climate_zone, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, name, location_lat ?? null, location_lng ?? null, area_hectares, soil_type ?? null, climate_zone ?? null, description ?? null);
+      INSERT INTO fields (id, user_id, name, location_lat, location_lng, area_hectares, soil_type, climate_zone, crop_type, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, req.user.id, name, location_lat ?? null, location_lng ?? null, area_hectares, soil_type ?? null, climate_zone ?? null, crop_type ?? null, description ?? null);
 
     const field = db.prepare('SELECT * FROM fields WHERE id = ?').get(id);
     res.status(201).json({ data: field, message: 'Field created successfully' });
@@ -100,11 +100,11 @@ router.put('/:id', validate(schemas.field), (req, res, next) => {
     const field = db.prepare('SELECT id FROM fields WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!field) return res.status(404).json({ error: 'Field not found' });
 
-    const { name, location_lat, location_lng, area_hectares, soil_type, climate_zone, description } = req.body;
+    const { name, location_lat, location_lng, area_hectares, soil_type, climate_zone, crop_type, description } = req.body;
     db.prepare(`
-      UPDATE fields SET name=?, location_lat=?, location_lng=?, area_hectares=?, soil_type=?, climate_zone=?, description=?, updated_at=CURRENT_TIMESTAMP
+      UPDATE fields SET name=?, location_lat=?, location_lng=?, area_hectares=?, soil_type=?, climate_zone=?, crop_type=?, description=?, updated_at=CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?
-    `).run(name, location_lat ?? null, location_lng ?? null, area_hectares, soil_type ?? null, climate_zone ?? null, description ?? null, req.params.id, req.user.id);
+    `).run(name, location_lat ?? null, location_lng ?? null, area_hectares, soil_type ?? null, climate_zone ?? null, crop_type ?? null, description ?? null, req.params.id, req.user.id);
 
     const updated = db.prepare('SELECT * FROM fields WHERE id = ?').get(req.params.id);
     res.json({ data: updated, message: 'Field updated successfully' });

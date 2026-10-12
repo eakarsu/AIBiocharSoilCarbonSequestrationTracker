@@ -18,6 +18,9 @@ const state = {
   currentPage: 'dashboard',
 };
 
+// Cache of rows rendered in tables so a clicked row can open its detail view.
+const recordCache = new Map();
+
 // ─── HTTP helpers ───────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
   const headers = Object.assign(
@@ -63,6 +66,12 @@ function toast(message, type) {
   setTimeout(() => el.classList.add('hidden'), 3500);
 }
 
+// Collection routes return { data: [...], pagination: {...} }.
+function rowsFromResponse(response) {
+  if (Array.isArray(response)) return response;
+  return Array.isArray(response?.data) ? response.data : [];
+}
+
 // ─── Auth ──────────────────────────────────────────────────────────────────
 function showTab(which) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -102,14 +111,21 @@ window.handleLogin = handleLogin;
 const demoCredentialsButton = document.createElement('button');
 demoCredentialsButton.type = 'button';
 demoCredentialsButton.className = 'btn-primary';
-demoCredentialsButton.textContent = 'Auto Fill Demo Credentials';
-demoCredentialsButton.setAttribute('aria-label', 'Auto Fill Demo Credentials');
+demoCredentialsButton.textContent = 'Fill demo credentials';
+demoCredentialsButton.setAttribute('aria-label', 'Fill demo credentials');
 demoCredentialsButton.addEventListener('click', async () => {
   try {
     const credentials = await api('/auth/demo-credentials');
     document.getElementById('login-email').value = credentials.email;
     document.getElementById('login-password').value = credentials.password;
-  } catch (error) { toast(error.message, 'error'); }
+    const errorEl = document.getElementById('login-error');
+    errorEl.classList.add('hidden');
+    document.getElementById('login-email').focus();
+  } catch (_error) {
+    const errorEl = document.getElementById('login-error');
+    errorEl.textContent = 'Demo credentials are not configured for this app. Sign in with an existing account.';
+    errorEl.classList.remove('hidden');
+  }
 });
 document.getElementById('login-form').appendChild(demoCredentialsButton);
 
@@ -146,7 +162,7 @@ function storeAuth(r) {
   state.user = r.user;
 }
 
-function logout() {
+function logout() { nativeCatalog.setAuthenticated(false);
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
@@ -157,7 +173,7 @@ function logout() {
 }
 window.logout = logout;
 
-function onAuthed() {
+function onAuthed() { nativeCatalog.setAuthenticated(true);
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   const nameEl = document.getElementById('user-name-display');
@@ -196,15 +212,15 @@ async function loadDashboard() {
   el.innerHTML = '<div class="loading-spinner">Loading dashboard...</div>';
   try {
     const r = await api('/dashboard');
-    const d = r.data || r || {};
+    const d = r?.data?.summary || {};
     el.innerHTML = `
       <div class="stat-grid">
-        <div class="stat-card"><div class="stat-label">Fields</div><div class="stat-value">${escapeHtml(d.totalFields || 0)}</div></div>
-        <div class="stat-card"><div class="stat-label">Applications</div><div class="stat-value">${escapeHtml(d.totalApplications || 0)}</div></div>
-        <div class="stat-card"><div class="stat-label">Soil Samples</div><div class="stat-value">${escapeHtml(d.totalSoilSamples || 0)}</div></div>
-        <div class="stat-card"><div class="stat-label">Reports</div><div class="stat-value">${escapeHtml(d.totalReports || 0)}</div></div>
-        <div class="stat-card"><div class="stat-label">Total Biochar (kg)</div><div class="stat-value">${escapeHtml(d.totalBiocharKg || 0)}</div></div>
-        <div class="stat-card"><div class="stat-label">Total Carbon Credits</div><div class="stat-value">${escapeHtml(d.totalCarbonCredits || 0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Fields</div><div class="stat-value">${escapeHtml(d.fields ?? 0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Applications</div><div class="stat-value">${escapeHtml(d.total_applications ?? 0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Soil Samples</div><div class="stat-value">${escapeHtml(d.soil_samples ?? 0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Reports</div><div class="stat-value">${escapeHtml(d.carbon_reports ?? 0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Total Biochar (kg)</div><div class="stat-value">${escapeHtml(d.total_biochar_kg ?? 0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Total Carbon Credits</div><div class="stat-value">${escapeHtml(d.total_carbon_credits ?? 0)}</div></div>
       </div>`;
   } catch (e) {
     el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
@@ -213,10 +229,21 @@ async function loadDashboard() {
 window.loadDashboard = loadDashboard;
 
 // ─── Generic CRUD list/page rendering ───────────────────────────────────────
-function tableFromRows(rows, columns) {
-  if (!rows || rows.length === 0) return '<div class="empty-state">No records yet.</div>';
+function tableFromRows(rows, columns, meta) {
+  if (!Array.isArray(rows) || rows.length === 0) return '<div class="empty-state">No records yet.</div>';
   const head = columns.map(c => '<th>' + escapeHtml(c.label) + '</th>').join('');
-  const body = rows.map(r => '<tr>' + columns.map(c => '<td>' + escapeHtml(r[c.key] != null ? String(r[c.key]) : '') + '</td>').join('') + '</tr>').join('');
+  const body = rows.map(r => {
+    const cells = columns.map(c => {
+      const raw = c.format ? c.format(r) : r[c.key];
+      return '<td>' + escapeHtml(raw != null ? String(raw) : '') + '</td>';
+    }).join('');
+    if (meta && meta.resource && r.id != null) {
+      const key = meta.resource + '::' + r.id;
+      recordCache.set(key, r);
+      return '<tr class="record-row" data-key="' + escapeAttr(key) + '" title="Click to view, edit or delete">' + cells + '</tr>';
+    }
+    return '<tr>' + cells + '</tr>';
+  }).join('');
   return '<table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
 }
 
@@ -225,14 +252,14 @@ async function loadFields() {
   el.innerHTML = '<div class="loading-spinner">Loading fields...</div>';
   try {
     const r = await api('/fields?page=' + state.page.fields);
-    state.fields = r.data || [];
+    state.fields = rowsFromResponse(r);
     el.innerHTML = tableFromRows(state.fields, [
       { key: 'name', label: 'Name' },
       { key: 'location', label: 'Location' },
       { key: 'area_hectares', label: 'Area (ha)' },
       { key: 'soil_type', label: 'Soil' },
       { key: 'crop_type', label: 'Crop' },
-    ]);
+    ], { resource: '/fields' });
   } catch (e) {
     el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
   }
@@ -244,13 +271,13 @@ async function loadApplications() {
   el.innerHTML = '<div class="loading-spinner">Loading applications...</div>';
   try {
     const r = await api('/applications?page=' + state.page.applications);
-    state.applications = r.data || [];
+    state.applications = rowsFromResponse(r);
     el.innerHTML = tableFromRows(state.applications, [
       { key: 'application_date', label: 'Date' },
       { key: 'biochar_type', label: 'Type' },
       { key: 'quantity_kg', label: 'Quantity (kg)' },
       { key: 'application_method', label: 'Method' },
-    ]);
+    ], { resource: '/applications' });
   } catch (e) {
     el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
   }
@@ -262,13 +289,13 @@ async function loadSoilSamples() {
   el.innerHTML = '<div class="loading-spinner">Loading samples...</div>';
   try {
     const r = await api('/soil-samples?page=' + state.page.soilSamples);
-    state.soilSamples = r.data || [];
+    state.soilSamples = rowsFromResponse(r);
     el.innerHTML = tableFromRows(state.soilSamples, [
       { key: 'sample_date', label: 'Date' },
       { key: 'ph', label: 'pH' },
-      { key: 'organic_carbon_pct', label: 'OC %' },
-      { key: 'nitrogen_pct', label: 'N %' },
-    ]);
+      { key: 'organic_carbon_percent', label: 'OC %' },
+      { key: 'nitrogen_ppm', label: 'N %' },
+    ], { resource: '/soil-samples' });
   } catch (e) {
     el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
   }
@@ -280,13 +307,13 @@ async function loadCarbonReports() {
   el.innerHTML = '<div class="loading-spinner">Loading reports...</div>';
   try {
     const r = await api('/carbon-reports?page=' + state.page.carbonReports);
-    state.carbonReports = r.data || [];
+    state.carbonReports = rowsFromResponse(r);
     el.innerHTML = tableFromRows(state.carbonReports, [
       { key: 'report_period_start', label: 'Period Start' },
       { key: 'report_period_end', label: 'Period End' },
       { key: 'net_carbon_credits', label: 'Credits' },
-      { key: 'estimated_value_usd', label: 'Value ($)' },
-    ]);
+      { key: 'estimated_value_usd', label: 'Value ($)', format: r => r.estimated_value_usd != null ? r.estimated_value_usd : (r.net_carbon_credits != null ? Math.round(r.net_carbon_credits * 50) : '') },
+    ], { resource: '/carbon-reports' });
     populateReportSelect();
   } catch (e) {
     el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
@@ -333,6 +360,7 @@ const fieldOptions = () => state.fields.map(field => ({ value: field.id, label: 
 function showFieldModal() { openCreateModal('Add Field', '/fields', [
   { name: 'name', label: 'Field name', required: true }, { name: 'area_hectares', label: 'Area (hectares)', type: 'number', step: '0.01', required: true },
   { name: 'soil_type', label: 'Soil type' }, { name: 'climate_zone', label: 'Climate zone' },
+  { name: 'crop_type', label: 'Crop' },
 ], loadFields); }
 function showApplicationModal() {
   if (!state.fields.length) return toast('Add a field before recording an application.', 'info');
@@ -358,6 +386,94 @@ function showCarbonReportModal() {
   ], loadCarbonReports);
 }
 function closeModal()            { document.getElementById('modal-overlay').classList.add('hidden'); }
+
+// ─── Record detail / edit / delete (row click) ──────────────────────────────
+const RESOURCE_META = {
+  '/fields': { title: 'Field', reload: () => loadFields(), fields: [
+    { name: 'name', label: 'Field name', required: true },
+    { name: 'area_hectares', label: 'Area (hectares)', type: 'number', step: '0.01', required: true },
+    { name: 'soil_type', label: 'Soil type' }, { name: 'climate_zone', label: 'Climate zone' }, { name: 'crop_type', label: 'Crop' },
+  ] },
+  '/applications': { title: 'Application', reload: () => loadApplications(), fields: [
+    { name: 'application_date', label: 'Application date', type: 'date', required: true },
+    { name: 'biochar_type', label: 'Biochar type', required: true },
+    { name: 'quantity_kg', label: 'Quantity (kg)', type: 'number', step: '0.01', required: true },
+    { name: 'carbon_content_percent', label: 'Carbon content (%)', type: 'number', step: '0.01' },
+    { name: 'application_method', label: 'Method' },
+  ] },
+  '/soil-samples': { title: 'Soil sample', reload: () => loadSoilSamples(), fields: [
+    { name: 'sample_date', label: 'Sample date', type: 'date', required: true },
+    { name: 'depth_cm', label: 'Depth (cm)', type: 'number', step: '0.01', required: true },
+    { name: 'organic_carbon_percent', label: 'Organic carbon (%)', type: 'number', step: '0.01' },
+    { name: 'bulk_density_g_cm3', label: 'Bulk density (g/cm3)', type: 'number', step: '0.001' },
+    { name: 'ph', label: 'pH', type: 'number', step: '0.01' },
+    { name: 'nitrogen_ppm', label: 'Nitrogen (ppm)', type: 'number' },
+  ] },
+  '/carbon-reports': { title: 'Carbon report', reload: () => loadCarbonReports(), fields: [
+    { name: 'report_period_start', label: 'Period start', type: 'date', required: true },
+    { name: 'report_period_end', label: 'Period end', type: 'date', required: true },
+    { name: 'total_biochar_applied_kg', label: 'Biochar applied (kg)', type: 'number', step: '0.01' },
+    { name: 'net_carbon_credits', label: 'Net credits', type: 'number', step: '0.01' },
+  ] },
+};
+const SKIP_DETAIL_KEYS = new Set(['user_id', 'password_hash']);
+function labelize(key) { return String(key).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+function detailValue(v) { if (v === null || v === undefined) return ''; return typeof v === 'object' ? JSON.stringify(v) : String(v); }
+function resourceFor(resource) { return RESOURCE_META[resource] || { title: 'Record', reload: () => {}, fields: [] }; }
+
+function openRecordDetail(resource, row) {
+  const meta = resourceFor(resource);
+  document.getElementById('modal-title').textContent = meta.title + ' details';
+  const entries = Object.entries(row).filter(([k]) => !SKIP_DETAIL_KEYS.has(k));
+  document.getElementById('modal-body').innerHTML =
+    '<dl class="record-detail">' + entries.map(([k, v]) =>
+      '<div><dt>' + escapeHtml(labelize(k)) + '</dt><dd>' + escapeHtml(detailValue(v)) + '</dd></div>').join('') + '</dl>' +
+    '<div class="modal-actions">' +
+      '<button class="btn btn-primary" id="record-edit" type="button">Edit</button>' +
+      '<button class="btn btn-danger" id="record-delete" type="button">Delete</button>' +
+      '<button class="btn btn-secondary" id="record-cancel" type="button">Cancel</button>' +
+    '</div>';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('record-edit').onclick = () => openEditModal(resource, row);
+  document.getElementById('record-cancel').onclick = closeModal;
+  document.getElementById('record-delete').onclick = async () => {
+    if (!window.confirm('Delete this record? This cannot be undone.')) return;
+    try { await api(resource + '/' + encodeURIComponent(row.id), { method: 'DELETE' }); closeModal(); await meta.reload(); toast('Record deleted', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+}
+
+function openEditModal(resource, row) {
+  const meta = resourceFor(resource);
+  if (!meta.fields.length) return;
+  document.getElementById('modal-title').textContent = 'Edit ' + meta.title;
+  document.getElementById('modal-body').innerHTML =
+    '<form id="edit-record-form">' + meta.fields.map(field => {
+      const value = row[field.name] == null ? '' : String(row[field.name]);
+      const required = field.required ? 'required' : '';
+      return '<div class="form-group"><label>' + escapeHtml(field.label) + '</label><input name="' + escapeAttr(field.name) + '" type="' + (field.type || 'text') + '" value="' + escapeAttr(value) + '" ' + required + (field.step ? ' step="' + field.step + '"' : '') + '></div>';
+    }).join('') +
+    '<div id="edit-error" class="error-msg hidden"></div>' +
+    '<div class="modal-actions"><button class="btn btn-primary" type="submit">Save</button><button class="btn btn-secondary" type="button" id="edit-cancel">Cancel</button></div></form>';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('edit-cancel').onclick = () => openRecordDetail(resource, row);
+  document.getElementById('edit-record-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget); const payload = {};
+    for (const field of meta.fields) { const value = form.get(field.name); if (value === '' || value === null) continue; payload[field.name] = field.type === 'number' ? Number(value) : value; }
+    try { await api(resource + '/' + encodeURIComponent(row.id), { method: 'PUT', body: JSON.stringify(payload) }); closeModal(); await meta.reload(); toast('Record updated', 'success'); }
+    catch (e) { const el = document.getElementById('edit-error'); el.textContent = (e.body && e.body.details && e.body.details.map(i => i.field + ': ' + i.message).join('; ')) || e.message; el.classList.remove('hidden'); }
+  });
+}
+
+document.addEventListener('click', event => {
+  const tr = event.target.closest && event.target.closest('tr.record-row');
+  if (!tr) return;
+  const key = tr.getAttribute('data-key') || '';
+  const row = recordCache.get(key);
+  if (row) openRecordDetail(key.split('::')[0], row);
+});
+window.openRecordDetail = openRecordDetail;
 window.showFieldModal = showFieldModal;
 window.showApplicationModal = showApplicationModal;
 window.showSoilSampleModal = showSoilSampleModal;
@@ -370,7 +486,7 @@ async function loadAIFieldOptions() {
   try {
     if (state.fields.length === 0) {
       const r = await api('/fields?page=1&limit=100');
-      state.fields = r.data || [];
+      state.fields = rowsFromResponse(r);
     }
   } catch (e) { /* show empty */ }
   ['ai-seq-field', 'ai-soil-field', 'ai-rec-field'].forEach(id => {
@@ -384,7 +500,7 @@ async function loadAIFieldOptions() {
   try {
     if (state.carbonReports.length === 0) {
       const r = await api('/carbon-reports?page=1&limit=100');
-      state.carbonReports = r.data || [];
+      state.carbonReports = rowsFromResponse(r);
     }
   } catch (e) { /* show empty */ }
   populateReportSelect();
@@ -405,7 +521,7 @@ function showAIResult(data, meta) {
   const contentEl = document.getElementById('ai-result-content');
   cont.classList.remove('hidden');
   metaEl.textContent = meta ? ('model: ' + (meta.model || '?') + ' • tokens: ' + (meta.tokens_used || 0)) : '';
-  contentEl.innerHTML = '<pre class="ai-json">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>';
+  contentEl.innerHTML = window.BrowserAIReport.render(data);
 }
 
 function showAIError(err) {
@@ -480,7 +596,7 @@ async function runFeedstockEligibility() {
   try {
     const input = JSON.parse(document.getElementById('feedstock-eligibility-input').value || '{}');
     const r = await api('/feedstock-eligibility/score', { method: 'POST', body: JSON.stringify(input) });
-    el.innerHTML = '<pre class="card">' + escapeHtml(JSON.stringify(r, null, 2)) + '</pre>';
+    el.innerHTML = window.BrowserAIReport.render(r.data ?? r);
   } catch (e) {
     el.innerHTML = '<div class="error-msg">' + escapeHtml(e.message) + '</div>';
   }
@@ -493,7 +609,7 @@ async function loadAIHistory() {
   el.innerHTML = '<div class="loading-spinner">Loading history...</div>';
   try {
     const r = await api('/ai/history?page=' + state.page.aiHistory);
-    state.aiHistory = r.data || [];
+    state.aiHistory = rowsFromResponse(r);
     if (state.aiHistory.length === 0) {
       el.innerHTML = '<div class="empty-state">No AI analyses yet.</div>';
       return;
@@ -535,6 +651,8 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function escapeAttr(s) { return escapeHtml(s); }
+
+const nativeCatalog = window.NativeWorkflowStudio.mount({element:document.getElementById('native-ai-studio'),config:window.nativeWorkflowConfig,request:api});nativeCatalog.setAuthenticated(Boolean(state.token));
 
 // ─── Boot ──────────────────────────────────────────────────────────────────
 (function init() {
