@@ -24,17 +24,26 @@ router.get('/', (req, res, next) => {
     const { page, limit, offset } = paginate(req);
     const userId = req.user.id;
 
-    const total = db.prepare('SELECT COUNT(*) as count FROM fields WHERE user_id = ?').get(userId).count;
+    // Feature pack 28B: search/filter on the main record list.
+    const conditions = ['f.user_id = ?'];
+    const params = [userId];
+    const search = String(req.query.search || req.query.q || '').trim();
+    if (search) { conditions.push('(f.name LIKE ? OR f.soil_type LIKE ? OR f.climate_zone LIKE ? OR f.crop_type LIKE ? OR f.description LIKE ?)'); const like = `%${search}%`; params.push(like, like, like, like, like); }
+    for (const key of ['soil_type', 'crop_type', 'climate_zone']) {
+      if (req.query[key]) { conditions.push(`f.${key} = ?`); params.push(String(req.query[key])); }
+    }
+    const where = conditions.join(' AND ');
+    const total = db.prepare(`SELECT COUNT(*) as count FROM fields f WHERE ${where}`).get(...params).count;
     const fields = db.prepare(`
       SELECT f.*,
         (SELECT COUNT(*) FROM biochar_applications WHERE field_id = f.id) as application_count,
         (SELECT COUNT(*) FROM soil_samples WHERE field_id = f.id) as sample_count,
         (SELECT COUNT(*) FROM carbon_reports WHERE field_id = f.id) as report_count
       FROM fields f
-      WHERE f.user_id = ?
+      WHERE ${where}
       ORDER BY f.created_at DESC
       LIMIT ? OFFSET ?
-    `).all(userId, limit, offset);
+    `).all(...params, limit, offset);
 
     res.json({
       data: fields,

@@ -203,6 +203,7 @@ function navigate(page) {
   if (page === 'soil-samples') loadSoilSamples();
   if (page === 'carbon-reports') loadCarbonReports();
   if (page === 'ai-analysis') { loadAIFieldOptions(); loadAIHistory(); }
+  if (page === 'feature-pack' && window.FeaturePack28B) window.FeaturePack28B.mount('feature-pack-root');
 }
 window.navigate = navigate;
 

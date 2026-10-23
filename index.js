@@ -74,6 +74,7 @@ app.use('/api/mrv-workflow', require('./src/routes/agenticMrvWorkflow')); // app
 app.use('/api/protocol-rag', require('./src/routes/biocharProtocolRag')); // apply pass 6 — audit custom suggestion
 app.use('/api/satellite-imagery', require('./src/routes/satelliteImageryPipeline')); // apply pass 6 — audit custom suggestion
 app.use('/api/credit-marketplace', require('./src/routes/creditMarketplace')); // apply pass 6 — audit custom suggestion
+app.use('/api/feature-pack', generalLimiter, require('./src/routes/featurePack28B')); // feature pack 28B
 
 // Unmatched /api routes must return a JSON 404 instead of the SPA shell.
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Route not found' }));
